@@ -529,11 +529,13 @@ let gameRunning = false;
 let raceFinished = false;
 
 // Player
-let player = { x: 0, y: 0, vy: 0, grounded: true, boosting: false, boostTimer: 0 };
+let player = { x: 0, y: 0, vy: 0, grounded: true, boosting: false, boostTimer: 0, coned: false, coneTimer: 0, shielded: false, shieldTimer: 0 };
 // Track
 let obstacles = [];
 let powerups = [];
+let hazards = []; // squirrels, puddles, cats, vet offices
 let slobberTrails = [];
+let particles = [];
 let trackLength = 0;
 let cameraY = 0;
 
@@ -541,8 +543,8 @@ let cameraY = 0;
 let keys = { left: false, right: false, jump: false };
 
 // Constants
-const GRAVITY = 0.6;
-const JUMP_FORCE = -14;
+const GRAVITY = 0.5;
+const JUMP_FORCE = -22;
 const MOVE_SPEED = 4;
 const FORWARD_SPEED = 2.5;
 const BOOST_SPEED = 5;
@@ -562,12 +564,14 @@ function generateTrack() {
   const rand = seededRandom(gameSeed);
   obstacles = [];
   powerups = [];
+  hazards = [];
   slobberTrails = [];
+  particles = [];
   trackLength = 15000;
-  
-  // Generate 35 obstacles
-  for (let i = 0; i < 35; i++) {
-    const yPos = 800 + (i * (trackLength - 1200) / 35) + rand() * 200 - 100;
+
+  // Generate 30 angry George obstacles
+  for (let i = 0; i < 30; i++) {
+    const yPos = 800 + (i * (trackLength - 1200) / 30) + rand() * 200 - 100;
     obstacles.push({
       x: (rand() * (LANE_WIDTH - 80)) - (LANE_WIDTH / 2 - 40),
       y: yPos,
@@ -580,15 +584,59 @@ function generateTrack() {
     });
     obstacles[obstacles.length - 1].baseX = obstacles[obstacles.length - 1].x;
   }
-  
-  // Generate 6 power-ups (treat bones)
-  for (let i = 0; i < 6; i++) {
-    const yPos = 1500 + i * (trackLength - 2000) / 6 + rand() * 300;
+
+  // Generate special hazards
+  const hazardTypes = ['vet', 'squirrel', 'puddle', 'cat'];
+  for (let i = 0; i < 12; i++) {
+    const yPos = 1000 + (i * (trackLength - 1500) / 12) + rand() * 250;
+    const hType = hazardTypes[Math.floor(rand() * hazardTypes.length)];
+    hazards.push({
+      x: (rand() * (LANE_WIDTH - 70)) - (LANE_WIDTH / 2 - 35),
+      y: yPos,
+      type: hType,
+      size: 45,
+      hit: false,
+      moving: hType === 'squirrel',
+      baseX: 0,
+      moveSpeed: (rand() * 3 + 2) * (rand() > 0.5 ? 1 : -1),
+      bobPhase: rand() * Math.PI * 2,
+    });
+    hazards[hazards.length - 1].baseX = hazards[hazards.length - 1].x;
+  }
+
+  // Generate 5 golden bone power-ups (speed boost)
+  for (let i = 0; i < 5; i++) {
+    const yPos = 1500 + i * (trackLength - 2000) / 5 + rand() * 300;
     powerups.push({
       x: (rand() * (LANE_WIDTH - 60)) - (LANE_WIDTH / 2 - 30),
       y: yPos,
       collected: false,
       bobPhase: rand() * Math.PI * 2,
+      type: 'bone',
+    });
+  }
+
+  // Generate 5 egg power-ups (shield)
+  for (let i = 0; i < 5; i++) {
+    const yPos = 1200 + i * (trackLength - 1800) / 5 + rand() * 350;
+    powerups.push({
+      x: (rand() * (LANE_WIDTH - 60)) - (LANE_WIDTH / 2 - 30),
+      y: yPos,
+      collected: false,
+      bobPhase: rand() * Math.PI * 2,
+      type: 'egg',
+    });
+  }
+
+  // Generate 4 tennis ball power-ups (small speed boost)
+  for (let i = 0; i < 4; i++) {
+    const yPos = 900 + i * (trackLength - 1400) / 4 + rand() * 400;
+    powerups.push({
+      x: (rand() * (LANE_WIDTH - 60)) - (LANE_WIDTH / 2 - 30),
+      y: yPos,
+      collected: false,
+      bobPhase: rand() * Math.PI * 2,
+      type: 'tennis',
     });
   }
 }
@@ -604,6 +652,10 @@ function initGame() {
     grounded: true,
     boosting: false,
     boostTimer: 0,
+    coned: false,
+    coneTimer: 0,
+    shielded: false,
+    shieldTimer: 0,
   };
   
   opponentState = { x: 0, y: 200, vy: 0, boosting: false };
@@ -648,24 +700,27 @@ function gameLoop(timestamp) {
 function update(dt) {
   if (raceFinished) return;
   
-  // Horizontal movement
-  if (keys.left) player.x -= MOVE_SPEED * dt;
-  if (keys.right) player.x += MOVE_SPEED * dt;
-  
+  // Auto-forward movement
+  let speed = FORWARD_SPEED;
+  if (player.boosting) speed = BOOST_SPEED;
+  if (player.coned) speed = FORWARD_SPEED * 0.5; // Cone makes you slow!
+  player.y += speed * dt;
+
+  // Horizontal movement (slower with cone)
+  const moveSpd = player.coned ? MOVE_SPEED * 0.6 : MOVE_SPEED;
+  if (keys.left) player.x -= moveSpd * dt;
+  if (keys.right) player.x += moveSpd * dt;
+
   // Clamp to lane
   const halfLane = LANE_WIDTH / 2 - PLAYER_SIZE / 2;
   player.x = Math.max(-halfLane, Math.min(halfLane, player.x));
-  
-  // Auto-forward movement
-  const speed = player.boosting ? BOOST_SPEED : FORWARD_SPEED;
-  player.y += speed * dt;
-  
+
   // Jump
   if (keys.jump && player.grounded) {
     player.vy = JUMP_FORCE;
     player.grounded = false;
   }
-  
+
   // Gravity (for visual jump arc)
   if (!player.grounded) {
     player.vy += GRAVITY * dt;
@@ -674,11 +729,10 @@ function update(dt) {
       player.vy = 0;
     }
   }
-  
+
   // Boost timer
   if (player.boosting) {
     player.boostTimer -= dt;
-    // Add slobber trail
     if (Math.random() < 0.3) {
       slobberTrails.push({
         x: player.x + (Math.random() - 0.5) * 30,
@@ -691,43 +745,132 @@ function update(dt) {
       player.boosting = false;
     }
   }
-  
+
+  // Cone timer
+  if (player.coned) {
+    player.coneTimer -= dt;
+    if (player.coneTimer <= 0) {
+      player.coned = false;
+    }
+  }
+
+  // Shield timer
+  if (player.shielded) {
+    player.shieldTimer -= dt;
+    if (player.shieldTimer <= 0) {
+      player.shielded = false;
+    }
+  }
+
   // Update slobber trails
   slobberTrails.forEach(s => s.life -= dt);
   slobberTrails = slobberTrails.filter(s => s.life > 0);
-  
-  // Collision with obstacles
+
+  // Update particles
+  particles.forEach(p => { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; });
+  particles = particles.filter(p => p.life > 0);
+
+  // Collision with angry George obstacles
   for (const obs of obstacles) {
     if (obs.hit) continue;
-    
-    // Update moving obstacles
     if (obs.moving) {
       obs.x = obs.baseX + Math.sin(gameTime * 0.03 * obs.moveSpeed) * 60;
     }
-    
     const dx = player.x - obs.x;
     const dy = player.y - obs.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    
+
     if (dist < (PLAYER_SIZE / 2 + obs.size / 2) && player.grounded) {
-      // Bounce back!
-      player.y -= BOUNCE_BACK;
-      obs.hit = true;
-      setTimeout(() => { obs.hit = false; }, 2000);
+      if (player.shielded) {
+        // Shield absorbs the hit!
+        player.shielded = false;
+        player.shieldTimer = 0;
+        obs.hit = true;
+        setTimeout(() => { obs.hit = false; }, 2000);
+        // Smash particles
+        for (let p = 0; p < 8; p++) {
+          particles.push({ x: obs.x, y: obs.y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 40, color: '#ffd700', size: 5 + Math.random()*5 });
+        }
+      } else {
+        player.y -= BOUNCE_BACK;
+        obs.hit = true;
+        setTimeout(() => { obs.hit = false; }, 2000);
+      }
     }
   }
-  
+
+  // Collision with special hazards
+  for (const hz of hazards) {
+    if (hz.hit) continue;
+    if (hz.moving) {
+      hz.x = hz.baseX + Math.sin(gameTime * 0.05 * hz.moveSpeed) * 100;
+    }
+    const dx = player.x - hz.x;
+    const dy = player.y - hz.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < (PLAYER_SIZE / 2 + hz.size / 2) && player.grounded) {
+      if (player.shielded) {
+        player.shielded = false;
+        player.shieldTimer = 0;
+        hz.hit = true;
+        setTimeout(() => { hz.hit = false; }, 3000);
+        for (let p = 0; p < 6; p++) {
+          particles.push({ x: hz.x, y: hz.y, vx: (Math.random()-0.5)*3, vy: (Math.random()-0.5)*3, life: 30, color: '#ffd700', size: 4 + Math.random()*4 });
+        }
+      } else {
+        hz.hit = true;
+        setTimeout(() => { hz.hit = false; }, 4000);
+
+        if (hz.type === 'vet') {
+          // CONE OF SHAME! Slow down + wider hitbox feel
+          player.coned = true;
+          player.coneTimer = 180; // ~3 seconds of cone
+          player.y -= 30;
+        } else if (hz.type === 'squirrel') {
+          // Squirrel pulls George sideways!
+          player.x += (Math.random() > 0.5 ? 80 : -80);
+          player.y -= 20;
+        } else if (hz.type === 'puddle') {
+          // Bath time! George spins and slows
+          player.y -= 50;
+          player.coned = true;
+          player.coneTimer = 90; // shorter slowdown
+        } else if (hz.type === 'cat') {
+          // Cat hiss! George runs backward
+          player.y -= 100;
+        }
+      }
+    }
+  }
+
   // Collect power-ups
   for (const pu of powerups) {
     if (pu.collected) continue;
     const dx = player.x - pu.x;
     const dy = player.y - pu.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    
+
     if (dist < (PLAYER_SIZE / 2 + POWERUP_SIZE / 2)) {
       pu.collected = true;
-      player.boosting = true;
-      player.boostTimer = 120; // ~2 seconds
+      // Sparkle particles
+      for (let p = 0; p < 10; p++) {
+        particles.push({ x: pu.x, y: pu.y, vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5, life: 30, color: pu.type === 'egg' ? '#FFE4B5' : pu.type === 'tennis' ? '#ADFF2F' : '#ffd700', size: 4 + Math.random()*6 });
+      }
+
+      if (pu.type === 'bone') {
+        // Golden bone = speed boost
+        player.boosting = true;
+        player.boostTimer = 120;
+      } else if (pu.type === 'egg') {
+        // Egg = shield! Protects from ONE hit
+        player.shielded = true;
+        player.shieldTimer = 600; // lasts a long time until used
+      } else if (pu.type === 'tennis') {
+        // Tennis ball = smaller speed boost
+        player.boosting = true;
+        player.boostTimer = 60;
+      }
     }
   }
   
@@ -845,51 +988,225 @@ function render() {
     ctx.globalAlpha = 1;
   });
   
-  // Power-ups (treat bones)
+  // Particles
+  particles.forEach(p => {
+    const px = centerX + p.x;
+    const py = p.y - cameraY;
+    if (py < -50 || py > canvas.height + 50) return;
+    ctx.globalAlpha = Math.min(1, p.life / 15);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(px, py, p.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+
+  // Power-ups
   powerups.forEach(pu => {
     if (pu.collected) return;
     const px = centerX + pu.x;
     const py = pu.y - cameraY + Math.sin(gameTime * 0.05 + pu.bobPhase) * 8;
     if (py < -50 || py > canvas.height + 50) return;
-    
-    // Glowing bone shape
+
     ctx.save();
     ctx.translate(px, py);
-    
-    // Glow
-    ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur = 20;
-    
-    // Bone body
-    ctx.fillStyle = '#FFF8DC';
-    ctx.strokeStyle = '#DAA520';
-    ctx.lineWidth = 2;
-    
-    // Simple bone shape
-    ctx.beginPath();
-    ctx.roundRect(-18, -6, 36, 12, 4);
-    ctx.fill();
-    ctx.stroke();
-    
-    // Bone ends
-    ctx.beginPath();
-    ctx.arc(-18, -4, 8, 0, Math.PI * 2);
-    ctx.arc(-18, 4, 8, 0, Math.PI * 2);
-    ctx.arc(18, -4, 8, 0, Math.PI * 2);
-    ctx.arc(18, 4, 8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    
-    ctx.shadowBlur = 0;
-    
-    // Sparkle
-    ctx.fillStyle = '#ffd700';
+
+    if (pu.type === 'bone') {
+      // Golden bone
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 20;
+      ctx.fillStyle = '#FFF8DC';
+      ctx.strokeStyle = '#DAA520';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(-18, -6, 36, 12, 4);
+      ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(-18, -4, 8, 0, Math.PI * 2); ctx.arc(-18, 4, 8, 0, Math.PI * 2);
+      ctx.arc(18, -4, 8, 0, Math.PI * 2); ctx.arc(18, 4, 8, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#ffd700';
+      ctx.font = '10px "Fredoka One"'; ctx.textAlign = 'center';
+      ctx.fillText('SPEED', 0, 4);
+    } else if (pu.type === 'egg') {
+      // Egg power-up (shield)
+      ctx.shadowColor = '#FFE4B5';
+      ctx.shadowBlur = 15;
+      // Egg shape
+      ctx.fillStyle = '#FFF8E7';
+      ctx.strokeStyle = '#DEB887';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 14, 18, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      // Yolk highlight
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath();
+      ctx.ellipse(0, 3, 7, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#8B4513';
+      ctx.font = '8px "Fredoka One"'; ctx.textAlign = 'center';
+      ctx.fillText('SHIELD', 0, -22);
+    } else if (pu.type === 'tennis') {
+      // Tennis ball
+      ctx.shadowColor = '#ADFF2F';
+      ctx.shadowBlur = 15;
+      ctx.fillStyle = '#ADFF2F';
+      ctx.strokeStyle = '#6B8E23';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 14, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      // Tennis ball line
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(-5, 0, 12, -0.8, 0.8);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(5, 0, 12, Math.PI - 0.8, Math.PI + 0.8);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Sparkle for all power-ups
     const sparkle = Math.sin(gameTime * 0.1 + pu.bobPhase) * 0.5 + 0.5;
     ctx.globalAlpha = sparkle;
+    ctx.fillStyle = '#ffd700';
     ctx.font = '14px serif';
     ctx.fillText('✨', 15, -15);
     ctx.globalAlpha = 1;
-    
+
+    ctx.restore();
+  });
+
+  // Special hazards
+  hazards.forEach(hz => {
+    const hx = centerX + hz.x;
+    const hy = hz.y - cameraY + (hz.type !== 'squirrel' ? 0 : Math.sin(gameTime * 0.08 + hz.bobPhase) * 3);
+    if (hy < -80 || hy > canvas.height + 80) return;
+
+    ctx.save();
+    ctx.translate(hx, hy);
+    if (hz.hit) ctx.globalAlpha = 0.3;
+
+    const sz = hz.size;
+
+    if (hz.type === 'vet') {
+      // Vet office - syringe/cone icon
+      ctx.fillStyle = '#E8E8E8';
+      ctx.strokeStyle = '#666';
+      ctx.lineWidth = 2;
+      // Cone shape
+      ctx.beginPath();
+      ctx.moveTo(0, -sz/2);
+      ctx.lineTo(-sz/2, sz/3);
+      ctx.lineTo(sz/2, sz/3);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      // Red cross
+      ctx.fillStyle = '#ff4444';
+      ctx.fillRect(-4, -15, 8, 20);
+      ctx.fillRect(-10, -9, 20, 8);
+      // Label
+      ctx.fillStyle = '#ff4444';
+      ctx.font = 'bold 9px "Fredoka One"'; ctx.textAlign = 'center';
+      ctx.fillText('VET!', 0, sz/2 + 12);
+    } else if (hz.type === 'squirrel') {
+      // Squirrel - brown fuzzy thing with big tail
+      ctx.fillStyle = '#8B4513';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 12, 15, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Tail
+      ctx.beginPath();
+      ctx.ellipse(-10, -12, 8, 16, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+      // Eyes
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(-4, -4, 4, 0, Math.PI * 2); ctx.arc(4, -4, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'black';
+      ctx.beginPath();
+      ctx.arc(-4, -4, 2, 0, Math.PI * 2); ctx.arc(4, -4, 2, 0, Math.PI * 2);
+      ctx.fill();
+      // Acorn
+      ctx.fillStyle = '#DAA520';
+      ctx.beginPath();
+      ctx.arc(0, 8, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#8B4513';
+      ctx.font = 'bold 9px "Fredoka One"'; ctx.textAlign = 'center';
+      ctx.fillText('SQUIRREL!', 0, sz/2 + 8);
+    } else if (hz.type === 'puddle') {
+      // Bath puddle - blue splashy water
+      ctx.fillStyle = 'rgba(70, 170, 255, 0.6)';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, sz/2 + 5, sz/4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#2196F3';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Bubbles
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.beginPath();
+      ctx.arc(-8, -5, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(10, -3, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(2, -8, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2196F3';
+      ctx.font = 'bold 9px "Fredoka One"'; ctx.textAlign = 'center';
+      ctx.fillText('BATH!', 0, sz/2);
+    } else if (hz.type === 'cat') {
+      // Cat - pointy ears, mean face
+      ctx.fillStyle = '#555';
+      ctx.beginPath();
+      ctx.ellipse(0, 2, 14, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Ears
+      ctx.beginPath();
+      ctx.moveTo(-10, -12); ctx.lineTo(-6, -24); ctx.lineTo(-2, -12);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(2, -12); ctx.lineTo(6, -24); ctx.lineTo(10, -12);
+      ctx.fill();
+      // Inner ears
+      ctx.fillStyle = '#ffaaaa';
+      ctx.beginPath();
+      ctx.moveTo(-8, -13); ctx.lineTo(-6, -20); ctx.lineTo(-4, -13);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(4, -13); ctx.lineTo(6, -20); ctx.lineTo(8, -13);
+      ctx.fill();
+      // Mean eyes
+      ctx.fillStyle = '#ADFF2F';
+      ctx.beginPath();
+      ctx.arc(-5, -2, 4, 0, Math.PI * 2); ctx.arc(5, -2, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'black';
+      ctx.beginPath();
+      ctx.ellipse(-5, -2, 1.5, 4, 0, 0, Math.PI * 2);
+      ctx.ellipse(5, -2, 1.5, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Whiskers
+      ctx.strokeStyle = '#999';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-14, 4); ctx.lineTo(-5, 6);
+      ctx.moveTo(-14, 7); ctx.lineTo(-5, 7);
+      ctx.moveTo(14, 4); ctx.lineTo(5, 6);
+      ctx.moveTo(14, 7); ctx.lineTo(5, 7);
+      ctx.stroke();
+      ctx.fillStyle = '#ff4444';
+      ctx.font = 'bold 9px "Fredoka One"'; ctx.textAlign = 'center';
+      ctx.fillText('HISSS!', 0, sz/2 + 8);
+    }
+
+    ctx.globalAlpha = 1;
     ctx.restore();
   });
   
@@ -1002,14 +1319,55 @@ function render() {
   ctx.restore();
   
   // Border color based on state
-  const borderColor = player.boosting ? '#ffd700' : '#44ff44';
+  const borderColor = player.boosting ? '#ffd700' : player.coned ? '#999' : '#44ff44';
   ctx.strokeStyle = borderColor;
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(0, 0, pSize / 2, 0, Math.PI * 2);
   ctx.stroke();
-  
+
   ctx.shadowBlur = 0;
+
+  // CONE OF SHAME!
+  if (player.coned) {
+    ctx.strokeStyle = '#E8E8E8';
+    ctx.fillStyle = 'rgba(232, 232, 232, 0.5)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-pSize/2 - 10, -pSize/2 - 5);
+    ctx.lineTo(-pSize/3, pSize/4);
+    ctx.lineTo(pSize/3, pSize/4);
+    ctx.lineTo(pSize/2 + 10, -pSize/2 - 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // "Cone of Shame" text
+    ctx.fillStyle = '#ff6666';
+    ctx.font = 'bold 10px "Fredoka One"';
+    ctx.textAlign = 'center';
+    ctx.fillText('CONE!', 0, -pSize/2 - 12);
+  }
+
+  // SHIELD BUBBLE
+  if (player.shielded) {
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([5, 5]);
+    ctx.lineDashOffset = gameTime * 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, pSize/2 + 10, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Egg icon floating above
+    ctx.fillStyle = '#FFF8E7';
+    ctx.beginPath();
+    ctx.ellipse(pSize/2 + 5, -pSize/2 - 5, 5, 7, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFD700';
+    ctx.beginPath();
+    ctx.ellipse(pSize/2 + 5, -pSize/2 - 3, 3, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
   
   // Name tag
   ctx.fillStyle = 'white';
@@ -1041,12 +1399,20 @@ function render() {
   ctx.fillStyle = '#4488ff';
   ctx.fillRect(120, 42, oppProgress * 0.8, 10);
   
-  // Boost indicator
+  // Status indicators
+  ctx.font = 'bold 20px "Fredoka One", cursive';
+  ctx.textAlign = 'center';
   if (player.boosting) {
     ctx.fillStyle = '#ffd700';
-    ctx.font = 'bold 20px "Fredoka One", cursive';
-    ctx.textAlign = 'center';
     ctx.fillText('SPEED BOOST!', canvas.width / 2, 40);
+  }
+  if (player.coned) {
+    ctx.fillStyle = '#ff6666';
+    ctx.fillText('CONE OF SHAME!', canvas.width / 2, 70);
+  }
+  if (player.shielded) {
+    ctx.fillStyle = '#FFE4B5';
+    ctx.fillText('EGG SHIELD!', canvas.width / 2, player.boosting ? 70 : 40);
   }
 }
 

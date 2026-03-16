@@ -354,10 +354,132 @@ const happyImg = new Image();
 happyImg.src = HAPPY_GEORGE_SRC;
 const angryImg = new Image();
 angryImg.src = ANGRY_GEORGE_SRC;
+const snowImg = new Image();
+snowImg.src = HAPPY_GEORGE_SRC; // Placeholder - will use snow George when available
+
+// Snow particles (always falling!)
+const snowflakes = [];
+for (let i = 0; i < 80; i++) {
+  snowflakes.push({
+    x: Math.random() * 2000,
+    y: Math.random() * 2000,
+    size: Math.random() * 4 + 2,
+    speed: Math.random() * 1.5 + 0.5,
+    wobble: Math.random() * Math.PI * 2,
+    wobbleSpeed: Math.random() * 0.02 + 0.01,
+  });
+}
 
 // Set menu previews
 document.getElementById('menu-george').src = HAPPY_GEORGE_SRC;
 document.getElementById('wait-george').src = HAPPY_GEORGE_SRC;
+
+// ============ SOUND EFFECTS ============
+let audioCtx = null;
+function initAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function playSound(type) {
+  if (!audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+
+    switch(type) {
+      case 'jump':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.linearRampToValueAtTime(600, now + 0.15);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2);
+        break;
+      case 'bounce':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.linearRampToValueAtTime(80, now + 0.3);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now); osc.stop(now + 0.3);
+        break;
+      case 'powerup':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.linearRampToValueAtTime(800, now + 0.1);
+        osc.frequency.linearRampToValueAtTime(1200, now + 0.2);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.25);
+        osc.start(now); osc.stop(now + 0.25);
+        break;
+      case 'meow':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(700, now);
+        osc.frequency.linearRampToValueAtTime(900, now + 0.15);
+        osc.frequency.linearRampToValueAtTime(500, now + 0.3);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.35);
+        osc.start(now); osc.stop(now + 0.35);
+        break;
+      case 'splash':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(50, now + 0.3);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.35);
+        osc.start(now); osc.stop(now + 0.35);
+        break;
+      case 'bark':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(250, now);
+        osc.frequency.linearRampToValueAtTime(400, now + 0.05);
+        osc.frequency.linearRampToValueAtTime(200, now + 0.15);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2);
+        break;
+      case 'snowball':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.linearRampToValueAtTime(1500, now + 0.3);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.4);
+        osc.start(now); osc.stop(now + 0.4);
+        break;
+      case 'zoomies':
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(500, now);
+        osc.frequency.linearRampToValueAtTime(1000, now + 0.1);
+        osc.frequency.linearRampToValueAtTime(500, now + 0.2);
+        osc.frequency.linearRampToValueAtTime(1000, now + 0.3);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.35);
+        osc.start(now); osc.stop(now + 0.35);
+        break;
+      case 'win':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523, now);
+        osc.frequency.setValueAtTime(659, now + 0.15);
+        osc.frequency.setValueAtTime(784, now + 0.3);
+        osc.frequency.setValueAtTime(1047, now + 0.45);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.6);
+        osc.start(now); osc.stop(now + 0.6);
+        break;
+      case 'cone':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.linearRampToValueAtTime(100, now + 0.4);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.45);
+        osc.start(now); osc.stop(now + 0.45);
+        break;
+    }
+  } catch(e) {}
+}
 
 // ============ SCREEN MANAGEMENT ============
 function showScreen(id) {
@@ -425,6 +547,7 @@ function handleServerMessage(msg) {
       
     case 'start_race':
       gameSeed = msg.seed;
+      currentTrack = (msg.round - 1) % TRACKS.length; // Cycle through tracks each round
       startCountdown();
       break;
       
@@ -452,12 +575,14 @@ function handleServerMessage(msg) {
 
 // ============ MENU HANDLERS ============
 document.getElementById('btn-host').addEventListener('click', () => {
+  initAudio();
   myName = document.getElementById('player-name').value.trim() || 'Player 1';
   connectWS();
   setTimeout(() => send({ type: 'host', name: myName }), 500);
 });
 
 document.getElementById('btn-join').addEventListener('click', () => {
+  initAudio();
   myName = document.getElementById('player-name').value.trim() || 'Player 2';
   const code = document.getElementById('join-code').value.trim();
   if (!code) {
@@ -529,7 +654,7 @@ let gameRunning = false;
 let raceFinished = false;
 
 // Player
-let player = { x: 0, y: 0, vy: 0, grounded: true, boosting: false, boostTimer: 0, coned: false, coneTimer: 0, shielded: false, shieldTimer: 0 };
+let player = { x: 0, y: 0, vy: 0, grounded: true, boosting: false, boostTimer: 0, coned: false, coneTimer: 0, shielded: false, shieldTimer: 0, snowball: false, snowballTimer: 0 };
 // Track
 let obstacles = [];
 let powerups = [];
@@ -541,6 +666,18 @@ let cameraY = 0;
 
 // Controls
 let keys = { left: false, right: false, jump: false };
+
+// Track themes
+const TRACKS = [
+  { name: "Snowy Park", sky1: '#B0C4DE', sky2: '#E8EEF4', ground: '#F0F8FF', road: '#C8D8E8', grass: '#E0EBE0', snowAmount: 80 },
+  { name: "Sunny Park", sky1: '#87CEEB', sky2: '#E0F7FA', ground: '#90EE90', road: '#D2B48C', grass: '#90EE90', snowAmount: 0 },
+  { name: "Beach Run", sky1: '#FFD700', sky2: '#87CEEB', ground: '#F4E4B0', road: '#F5DEB3', grass: '#F4E4B0', snowAmount: 0 },
+  { name: "Pet Store", sky1: '#FFB6C1', sky2: '#FFF0F5', ground: '#FFE4E1', road: '#FFDAB9', grass: '#FFE4E1', snowAmount: 0 },
+];
+let currentTrack = 0;
+let zoomiesActive = false;
+let zoomiesTimer = 0;
+let zoomiesDir = 1;
 
 // Constants
 const GRAVITY = 0.5;
@@ -565,6 +702,19 @@ function generateTrack() {
   obstacles = [];
   powerups = [];
   hazards = [];
+  zoomiesActive = false;
+  zoomiesTimer = 0;
+
+  // Update snow amount based on track
+  const track = TRACKS[currentTrack];
+  snowflakes.length = 0;
+  for (let i = 0; i < track.snowAmount; i++) {
+    snowflakes.push({
+      x: Math.random() * 2000, y: Math.random() * 2000,
+      size: Math.random() * 4 + 2, speed: Math.random() * 1.5 + 0.5,
+      wobble: Math.random() * Math.PI * 2, wobbleSpeed: Math.random() * 0.02 + 0.01,
+    });
+  }
   slobberTrails = [];
   particles = [];
   trackLength = 15000;
@@ -639,6 +789,18 @@ function generateTrack() {
       type: 'tennis',
     });
   }
+
+  // Generate 3 snowball power-ups (SNOWBALL MODE - plow through everything!)
+  for (let i = 0; i < 3; i++) {
+    const yPos = 2000 + i * (trackLength - 3000) / 3 + rand() * 500;
+    powerups.push({
+      x: (rand() * (LANE_WIDTH - 60)) - (LANE_WIDTH / 2 - 30),
+      y: yPos,
+      collected: false,
+      bobPhase: rand() * Math.PI * 2,
+      type: 'snowball',
+    });
+  }
 }
 
 function initGame() {
@@ -656,6 +818,8 @@ function initGame() {
     coneTimer: 0,
     shielded: false,
     shieldTimer: 0,
+    snowball: false,
+    snowballTimer: 0,
   };
   
   opponentState = { x: 0, y: 200, vy: 0, boosting: false };
@@ -703,6 +867,7 @@ function update(dt) {
   // Auto-forward movement
   let speed = FORWARD_SPEED;
   if (player.boosting) speed = BOOST_SPEED;
+  if (player.snowball) speed = BOOST_SPEED * 1.3; // Snowball mode is FAST
   if (player.coned) speed = FORWARD_SPEED * 0.5; // Cone makes you slow!
   player.y += speed * dt;
 
@@ -719,6 +884,7 @@ function update(dt) {
   if (keys.jump && player.grounded) {
     player.vy = JUMP_FORCE;
     player.grounded = false;
+    playSound('jump');
   }
 
   // Gravity (for visual jump arc)
@@ -762,6 +928,39 @@ function update(dt) {
     }
   }
 
+  // Snowball mode timer
+  if (player.snowball) {
+    player.snowballTimer -= dt;
+    // Snow trail particles
+    if (Math.random() < 0.5) {
+      particles.push({ x: player.x + (Math.random()-0.5)*40, y: player.y - 5, vx: (Math.random()-0.5)*2, vy: -Math.random()*2, life: 40, color: 'white', size: 4 + Math.random()*6 });
+    }
+    if (player.snowballTimer <= 0) {
+      player.snowball = false;
+    }
+  }
+
+  // ZOOMIES! Random chance to trigger
+  if (!zoomiesActive && !player.coned && Math.random() < 0.0005 * dt) {
+    zoomiesActive = true;
+    zoomiesTimer = 90;
+    zoomiesDir = Math.random() > 0.5 ? 1 : -1;
+    playSound('zoomies');
+  }
+  if (zoomiesActive) {
+    zoomiesTimer -= dt;
+    // Zigzag like crazy!
+    player.x += Math.sin(gameTime * 0.3) * 6 * dt;
+    player.y += 2 * dt; // Extra forward speed during zoomies
+    // Zoomie particles
+    if (Math.random() < 0.4) {
+      particles.push({ x: player.x + (Math.random()-0.5)*30, y: player.y, vx: (Math.random()-0.5)*4, vy: -Math.random()*3, life: 25, color: '#FFD700', size: 3 + Math.random()*4 });
+    }
+    if (zoomiesTimer <= 0) {
+      zoomiesActive = false;
+    }
+  }
+
   // Update slobber trails
   slobberTrails.forEach(s => s.life -= dt);
   slobberTrails = slobberTrails.filter(s => s.life > 0);
@@ -781,19 +980,28 @@ function update(dt) {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist < (PLAYER_SIZE / 2 + obs.size / 2) && player.grounded) {
-      if (player.shielded) {
+      if (player.snowball) {
+        // SNOWBALL MODE - plow right through!
+        obs.hit = true;
+        setTimeout(() => { obs.hit = false; }, 3000);
+        playSound('snowball');
+        for (let p = 0; p < 12; p++) {
+          particles.push({ x: obs.x, y: obs.y, vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6, life: 35, color: 'white', size: 4 + Math.random()*6 });
+        }
+      } else if (player.shielded) {
         // Shield absorbs the hit!
         player.shielded = false;
         player.shieldTimer = 0;
         obs.hit = true;
         setTimeout(() => { obs.hit = false; }, 2000);
-        // Smash particles
+        playSound('powerup');
         for (let p = 0; p < 8; p++) {
           particles.push({ x: obs.x, y: obs.y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 40, color: '#ffd700', size: 5 + Math.random()*5 });
         }
       } else {
         player.y -= BOUNCE_BACK;
         obs.hit = true;
+        playSound('bounce');
         setTimeout(() => { obs.hit = false; }, 2000);
       }
     }
@@ -810,7 +1018,14 @@ function update(dt) {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist < (PLAYER_SIZE / 2 + hz.size / 2) && player.grounded) {
-      if (player.shielded) {
+      if (player.snowball) {
+        // SNOWBALL MODE - destroy everything!
+        hz.hit = true;
+        setTimeout(() => { hz.hit = false; }, 4000);
+        for (let p = 0; p < 10; p++) {
+          particles.push({ x: hz.x, y: hz.y, vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5, life: 30, color: 'white', size: 4 + Math.random()*5 });
+        }
+      } else if (player.shielded) {
         player.shielded = false;
         player.shieldTimer = 0;
         hz.hit = true;
@@ -823,22 +1038,26 @@ function update(dt) {
         setTimeout(() => { hz.hit = false; }, 4000);
 
         if (hz.type === 'vet') {
-          // CONE OF SHAME! Slow down + wider hitbox feel
+          // CONE OF SHAME!
           player.coned = true;
-          player.coneTimer = 180; // ~3 seconds of cone
+          player.coneTimer = 180;
           player.y -= 30;
+          playSound('cone');
         } else if (hz.type === 'squirrel') {
           // Squirrel pulls George sideways!
           player.x += (Math.random() > 0.5 ? 80 : -80);
           player.y -= 20;
+          playSound('bark');
         } else if (hz.type === 'puddle') {
-          // Bath time! George spins and slows
+          // Bath time!
           player.y -= 50;
           player.coned = true;
-          player.coneTimer = 90; // shorter slowdown
+          player.coneTimer = 90;
+          playSound('splash');
         } else if (hz.type === 'cat') {
-          // Cat hiss! George runs backward
+          // Cat hiss!
           player.y -= 100;
+          playSound('meow');
         }
       }
     }
@@ -859,17 +1078,23 @@ function update(dt) {
       }
 
       if (pu.type === 'bone') {
-        // Golden bone = speed boost
         player.boosting = true;
         player.boostTimer = 120;
+        playSound('powerup');
       } else if (pu.type === 'egg') {
-        // Egg = shield! Protects from ONE hit
         player.shielded = true;
-        player.shieldTimer = 600; // lasts a long time until used
+        player.shieldTimer = 600;
+        playSound('powerup');
       } else if (pu.type === 'tennis') {
-        // Tennis ball = smaller speed boost
         player.boosting = true;
         player.boostTimer = 60;
+        playSound('powerup');
+      } else if (pu.type === 'snowball') {
+        player.snowball = true;
+        player.snowballTimer = 180;
+        player.coned = false;
+        player.coneTimer = 0;
+        playSound('snowball');
       }
     }
   }
@@ -890,10 +1115,11 @@ function render() {
   
   const centerX = canvas.width / 2;
   
-  // Sky gradient
+  // Sky gradient (themed!)
+  const track = TRACKS[currentTrack];
   const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  skyGrad.addColorStop(0, '#87CEEB');
-  skyGrad.addColorStop(1, '#E0F7FA');
+  skyGrad.addColorStop(0, track.sky1);
+  skyGrad.addColorStop(1, track.sky2);
   ctx.fillStyle = skyGrad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
@@ -913,14 +1139,29 @@ function render() {
     ctx.fill();
   }
   
+  // Falling snow!
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+  snowflakes.forEach(sf => {
+    sf.y += sf.speed;
+    sf.wobble += sf.wobbleSpeed;
+    sf.x += Math.sin(sf.wobble) * 0.5;
+    // Wrap around
+    if (sf.y > canvas.height + 10) { sf.y = -10; sf.x = Math.random() * canvas.width; }
+    if (sf.x > canvas.width + 10) sf.x = -10;
+    if (sf.x < -10) sf.x = canvas.width + 10;
+    ctx.beginPath();
+    ctx.arc(sf.x, sf.y, sf.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
   // Track (road)
   const trackLeft = centerX - LANE_WIDTH / 2;
   const trackRight = centerX + LANE_WIDTH / 2;
   
-  ctx.fillStyle = '#90EE90';
+  ctx.fillStyle = track.grass;
   ctx.fillRect(trackLeft - 60, 0, LANE_WIDTH + 120, canvas.height);
-  
-  ctx.fillStyle = '#D2B48C';
+
+  ctx.fillStyle = track.road;
   ctx.fillRect(trackLeft, 0, LANE_WIDTH, canvas.height);
   
   // Lane dashes
@@ -1069,6 +1310,38 @@ function render() {
       ctx.arc(5, 0, 12, Math.PI - 0.8, Math.PI + 0.8);
       ctx.stroke();
       ctx.shadowBlur = 0;
+    } else if (pu.type === 'snowball') {
+      // Snowball power-up - snowy George!
+      ctx.shadowColor = '#ADD8E6';
+      ctx.shadowBlur = 25;
+      // Snow circle
+      ctx.fillStyle = 'white';
+      ctx.strokeStyle = '#ADD8E6';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 20, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      // George face inside
+      ctx.beginPath();
+      ctx.arc(0, 0, 16, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.save(); ctx.clip();
+      ctx.drawImage(snowImg, -16, -16, 32, 32);
+      ctx.restore();
+      // Snow sparkles around it
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'white';
+      for (let s = 0; s < 6; s++) {
+        const angle = (gameTime * 0.03 + s * Math.PI / 3);
+        const sx = Math.cos(angle) * 26;
+        const sy = Math.sin(angle) * 26;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2 + Math.sin(gameTime * 0.1 + s) * 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#ADD8E6';
+      ctx.font = 'bold 8px "Fredoka One"'; ctx.textAlign = 'center';
+      ctx.fillText('SNOWBALL!', 0, 32);
     }
 
     // Sparkle for all power-ups
@@ -1285,6 +1558,26 @@ function render() {
   ctx.save();
   ctx.translate(pScreenX, pScreenY);
   
+  // Snowball mode effect
+  if (player.snowball) {
+    ctx.shadowColor = '#ADD8E6';
+    ctx.shadowBlur = 35;
+    // Growing snowball ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, PLAYER_SIZE/2 + 15 + Math.sin(gameTime * 0.1) * 5, 0, Math.PI * 2);
+    ctx.stroke();
+    // Snow chunks flying off
+    for (let i = 0; i < 5; i++) {
+      const angle = gameTime * 0.05 + i * Math.PI * 2 / 5;
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(Math.cos(angle) * (PLAYER_SIZE/2 + 12), Math.sin(angle) * (PLAYER_SIZE/2 + 12), 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   // Boost effect
   if (player.boosting) {
     ctx.shadowColor = '#ffd700';
@@ -1414,6 +1707,24 @@ function render() {
     ctx.fillStyle = '#FFE4B5';
     ctx.fillText('EGG SHIELD!', canvas.width / 2, player.boosting ? 70 : 40);
   }
+  if (player.snowball) {
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = '#ADD8E6';
+    ctx.lineWidth = 2;
+    ctx.strokeText('SNOWBALL MODE!', canvas.width / 2, 100);
+    ctx.fillText('SNOWBALL MODE!', canvas.width / 2, 100);
+  }
+  if (zoomiesActive) {
+    ctx.fillStyle = '#FF69B4';
+    ctx.font = 'bold 24px "Fredoka One", cursive';
+    ctx.fillText('ZOOMIES!!!', canvas.width / 2, 130);
+  }
+
+  // Track name display
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font = '12px Nunito';
+  ctx.textAlign = 'right';
+  ctx.fillText(TRACKS[currentTrack].name, canvas.width - 15, canvas.height - 15);
 }
 
 // ============ RESULTS ============
@@ -1422,8 +1733,8 @@ function showResults(msg) {
   showScreen('result-screen');
   
   const isWinner = msg.winner === myIndex;
-  document.getElementById('winner-text').textContent = 
-    isWinner ? 'YOU WIN! 🎉' : `${msg.winnerName} Wins!`;
+  document.getElementById('winner-text').textContent =
+    isWinner ? 'George knocks over the treat jar! YOU WIN!' : `${msg.winnerName} got the treats!`;
   
   const scoresDiv = document.getElementById('scores-display');
   scoresDiv.innerHTML = msg.scores.map(s => `
@@ -1436,8 +1747,8 @@ function showResults(msg) {
   document.getElementById('btn-next-round').disabled = false;
   document.getElementById('btn-next-round').textContent = 'Next Round!';
   
-  // Confetti!
-  if (isWinner) spawnConfetti();
+  // Confetti and victory sound!
+  if (isWinner) { spawnConfetti(); playSound('win'); } else { playSound('bounce'); }
 }
 
 function spawnConfetti() {
@@ -1445,10 +1756,11 @@ function spawnConfetti() {
   confettiCanvas.width = window.innerWidth;
   confettiCanvas.height = window.innerHeight;
   const cCtx = confettiCanvas.getContext('2d');
-  
+
   const pieces = [];
   const colors = ['#ff6b6b', '#ffd700', '#4ecdc4', '#45b7d1', '#f093fb', '#00f2fe', '#43e97b'];
-  
+  const treats = ['🦴', '🥚', '🎾', '🐾', '⭐'];
+
   for (let i = 0; i < 150; i++) {
     pieces.push({
       x: Math.random() * confettiCanvas.width,
@@ -1460,31 +1772,86 @@ function spawnConfetti() {
       vx: (Math.random() - 0.5) * 2,
       rotation: Math.random() * 360,
       rotSpeed: (Math.random() - 0.5) * 10,
+      isTreat: i < 20, // First 20 are treat emojis
+      treat: treats[Math.floor(Math.random() * treats.length)],
     });
   }
-  
+
+  // Treat jar animation
+  let jarY = -100;
+  let jarBounce = 0;
+  let treatsFlying = false;
+
   function animateConfetti() {
     cCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
     let alive = false;
-    
+
+    // Treat jar falling and bouncing
+    if (jarY < confettiCanvas.height * 0.5) {
+      jarY += 8;
+    } else if (!treatsFlying) {
+      treatsFlying = true;
+      jarBounce = 10;
+    }
+    if (jarBounce > 0) jarBounce -= 0.3;
+
+    // Draw treat jar
+    const jarX = confettiCanvas.width / 2;
+    const jarDrawY = Math.min(jarY, confettiCanvas.height * 0.5) - Math.abs(jarBounce) * 3;
+    cCtx.save();
+    cCtx.translate(jarX, jarDrawY);
+    cCtx.rotate(treatsFlying ? 0.3 : 0);
+    // Jar body
+    cCtx.fillStyle = '#DEB887';
+    cCtx.beginPath();
+    cCtx.roundRect(-30, -20, 60, 50, 8);
+    cCtx.fill();
+    cCtx.strokeStyle = '#8B4513';
+    cCtx.lineWidth = 3;
+    cCtx.stroke();
+    // Jar lid (tipped if treats flying)
+    if (treatsFlying) {
+      cCtx.fillStyle = '#8B4513';
+      cCtx.beginPath();
+      cCtx.roundRect(20, -40, 40, 12, 4);
+      cCtx.fill();
+    } else {
+      cCtx.fillStyle = '#8B4513';
+      cCtx.beginPath();
+      cCtx.roundRect(-35, -28, 70, 12, 4);
+      cCtx.fill();
+    }
+    // Bone label on jar
+    cCtx.font = '20px serif';
+    cCtx.textAlign = 'center';
+    cCtx.fillText('🦴', 0, 15);
+    cCtx.restore();
+
+    // Confetti and treats
     pieces.forEach(p => {
       p.y += p.vy;
       p.x += p.vx;
       p.rotation += p.rotSpeed;
-      
+
       if (p.y < confettiCanvas.height + 20) alive = true;
-      
+
       cCtx.save();
       cCtx.translate(p.x, p.y);
       cCtx.rotate(p.rotation * Math.PI / 180);
-      cCtx.fillStyle = p.color;
-      cCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      if (p.isTreat) {
+        cCtx.font = '20px serif';
+        cCtx.textAlign = 'center';
+        cCtx.fillText(p.treat, 0, 0);
+      } else {
+        cCtx.fillStyle = p.color;
+        cCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      }
       cCtx.restore();
     });
-    
+
     if (alive) requestAnimationFrame(animateConfetti);
   }
-  
+
   animateConfetti();
 }
 
